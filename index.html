@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emotion Detector</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --surface2: #1c1c28;
+      --border: rgba(255,255,255,0.07);
+      --text: #f0f0f8;
+      --muted: #6b6b8a;
+      --accent: #7c6cf0;
+
+      --happy:    #f9d648;
+      --sad:      #5b9cf6;
+      --angry:    #f05f5f;
+      --surprised:#f97c3c;
+      --fearful:  #b07ef8;
+      --disgusted:#5bcf8a;
+      --neutral:  #888baa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, #fff 40%, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p {
+      color: var(--muted);
+      font-size: 15px;
+      margin-top: 6px;
+      font-weight: 300;
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 20px;
+      width: 100%;
+      max-width: 1000px;
+    }
+
+    /* ── Camera box ── */
+    .cam-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .cam-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4/3;
+      background: #000;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transform: scaleX(-1);
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      transform: scaleX(-1);
+    }
+
+    .cam-footer {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .status-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .status-dot.active { background: #4cde80; box-shadow: 0 0 8px #4cde8088; animation: pulse 1.5s infinite; }
+    .status-dot.error  { background: var(--angry); }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+
+    #status-text {
+      font-size: 13px;
+      color: var(--muted);
+      flex: 1;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    #start-btn {
+      padding: 9px 20px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    #start-btn:hover { opacity: 0.85; }
+    #start-btn:active { transform: scale(0.97); }
+    #start-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Side panel ── */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ── Main emotion card ── */
+    .emotion-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+      transition: border-color 0.4s;
+    }
+
+    .emotion-emoji {
+      font-size: 64px;
+      line-height: 1;
+      margin-bottom: 10px;
+      display: block;
+      filter: drop-shadow(0 0 20px currentColor);
+      transition: all 0.4s;
+    }
+
+    .emotion-label {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      transition: color 0.4s;
+    }
+
+    .confidence-row {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .confidence-bar-wrap {
+      flex: 1;
+      height: 5px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #confidence-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 3px;
+      background: var(--accent);
+      transition: width 0.4s, background 0.4s;
+    }
+    #confidence-pct {
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--muted);
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* ── All emotions bars ── */
+    .bars-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      flex: 1;
+    }
+
+    .bars-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 11px;
+    }
+    .bar-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+    .bar-name { font-size: 12px; color: var(--muted); width: 68px; flex-shrink: 0; }
+    .bar-track {
+      flex: 1;
+      height: 5px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.5s ease, background 0.3s;
+    }
+    .bar-pct {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--muted);
+      width: 32px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* ── Loading overlay ── */
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      gap: 16px;
+      transition: opacity 0.5s;
+    }
+    #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--surface2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-overlay p { color: var(--muted); font-size: 14px; font-family: 'JetBrains Mono', monospace; }
+
+    /* ── Placeholder ── */
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .placeholder .big { font-size: 48px; }
+    #video-placeholder { background: var(--surface2); }
+
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading overlay while face-api models download -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p id="load-msg">Loading AI models...</p>
+</div>
+
+<header>
+  <h1>Emotion Detector</h1>
+  <p>Real-time face emotion detection via your camera</p>
+</header>
+
+<div class="layout">
+
+  <!-- Camera -->
+  <div class="cam-card">
+    <div class="cam-wrap" id="cam-wrap">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div class="placeholder" id="video-placeholder">
+        <span class="big">📷</span>
+        <span>Press Start Camera</span>
+      </div>
+    </div>
+    <div class="cam-footer">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Camera off</span>
+      <button id="start-btn">Start Camera</button>
+    </div>
+  </div>
+
+  <!-- Side panel -->
+  <div class="side-panel">
+
+    <!-- Main detected emotion -->
+    <div class="emotion-card" id="emotion-card">
+      <span class="emotion-emoji" id="main-emoji">🤔</span>
+      <div class="emotion-label" id="main-label" style="color:var(--muted)">Waiting...</div>
+      <div class="confidence-row">
+        <div class="confidence-bar-wrap">
+          <div id="confidence-bar"></div>
+        </div>
+        <span id="confidence-pct">0%</span>
+      </div>
+    </div>
+
+    <!-- All emotion bars -->
+    <div class="bars-card">
+      <div class="bars-title">All emotions</div>
+      <div id="all-bars"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- face-api.js from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script>
+const EMOTIONS = [
+  { key: 'happy',     label: 'Happy',     emoji: '😄', color: 'var(--happy)'    },
+  { key: 'sad',       label: 'Sad',       emoji: '😢', color: 'var(--sad)'      },
+  { key: 'angry',     label: 'Angry',     emoji: '😠', color: 'var(--angry)'    },
+  { key: 'surprised', label: 'Surprised', emoji: '😲', color: 'var(--surprised)'},
+  { key: 'fearful',   label: 'Fearful',   emoji: '😨', color: 'var(--fearful)'  },
+  { key: 'disgusted', label: 'Disgusted', emoji: '🤢', color: 'var(--disgusted)'},
+  { key: 'neutral',   label: 'Neutral',   emoji: '😐', color: 'var(--neutral)'  },
+];
+
+const video      = document.getElementById('video');
+const overlay    = document.getElementById('overlay');
+const ctx        = overlay.getContext('2d');
+const startBtn   = document.getElementById('start-btn');
+const statusDot  = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const mainEmoji  = document.getElementById('main-emoji');
+const mainLabel  = document.getElementById('main-label');
+const confBar    = document.getElementById('confidence-bar');
+const confPct    = document.getElementById('confidence-pct');
+const loadOverlay= document.getElementById('loading-overlay');
+const loadMsg    = document.getElementById('load-msg');
+const placeholder= document.getElementById('video-placeholder');
+
+// Build bars
+const allBarsEl = document.getElementById('all-bars');
+const barFills  = {};
+const barPcts   = {};
+EMOTIONS.forEach(e => {
+  const row = document.createElement('div');
+  row.className = 'bar-row';
+  row.innerHTML = `
+    <span class="bar-icon">${e.emoji}</span>
+    <span class="bar-name">${e.label}</span>
+    <div class="bar-track"><div class="bar-fill" id="bf-${e.key}" style="background:${e.color}"></div></div>
+    <span class="bar-pct" id="bp-${e.key}">0%</span>`;
+  allBarsEl.appendChild(row);
+  barFills[e.key] = document.getElementById(`bf-${e.key}`);
+  barPcts[e.key]  = document.getElementById(`bp-${e.key}`);
+});
+
+// Load models from CDN
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+
+async function loadModels() {
+  loadMsg.textContent = 'Loading face detector...';
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  loadMsg.textContent = 'Loading landmark model...';
+  await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+  loadMsg.textContent = 'Loading expression model...';
+  await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+  loadOverlay.classList.add('hidden');
+  startBtn.disabled = false;
+}
+
+loadModels().catch(err => {
+  loadMsg.textContent = 'Error loading models: ' + err.message;
+});
+
+let detecting = false;
+let stream = null;
+
+startBtn.addEventListener('click', async () => {
+  if (detecting) {
+    stopCamera();
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    video.srcObject = stream;
+    placeholder.style.display = 'none';
+    statusDot.className = 'status-dot active';
+    statusText.textContent = 'Detecting emotions...';
+    startBtn.textContent = 'Stop Camera';
+    detecting = true;
+    video.addEventListener('loadedmetadata', () => {
+      overlay.width  = video.videoWidth;
+      overlay.height = video.videoHeight;
+      detectLoop();
+    });
+  } catch (err) {
+    statusDot.className = 'status-dot error';
+    statusText.textContent = 'Camera error: ' + err.message;
+  }
+});
+
+function stopCamera() {
+  detecting = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  placeholder.style.display = 'flex';
+  statusDot.className = 'status-dot';
+  statusText.textContent = 'Camera off';
+  startBtn.textContent = 'Start Camera';
+  resetUI();
+}
+
+function resetUI() {
+  mainEmoji.textContent = '🤔';
+  mainLabel.textContent = 'Waiting...';
+  mainLabel.style.color = 'var(--muted)';
+  confBar.style.width = '0%';
+  confPct.textContent = '0%';
+  EMOTIONS.forEach(e => {
+    barFills[e.key].style.width = '0%';
+    barPcts[e.key].textContent  = '0%';
+  });
+}
+
+async function detectLoop() {
+  if (!detecting) return;
+
+  const result = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
+    .withFaceLandmarks(true)
+    .withFaceExpressions();
+
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+  if (result) {
+    const { x, y, width, height } = result.detection.box;
+
+    // Find dominant emotion
+    const exprs = result.expressions;
+    let topKey = 'neutral', topVal = 0;
+    for (const [k, v] of Object.entries(exprs)) {
+      if (v > topVal) { topVal = v; topKey = k; }
+    }
+
+    const found = EMOTIONS.find(e => e.key === topKey) || EMOTIONS[6];
+    const pct = Math.round(topVal * 100);
+
+    // Update main card
+    mainEmoji.textContent  = found.emoji;
+    mainLabel.textContent  = found.label;
+    mainLabel.style.color  = found.color;
+    confBar.style.width    = pct + '%';
+    confBar.style.background = found.color;
+    confPct.textContent    = pct + '%';
+
+    // Update bars
+    EMOTIONS.forEach(e => {
+      const v = Math.round((exprs[e.key] || 0) * 100);
+      barFills[e.key].style.width = v + '%';
+      barPcts[e.key].textContent  = v + '%';
+    });
+
+    // Draw face box
+    // mirror correction: overlay is scaleX(-1) via CSS, so draw normally
+    ctx.strokeStyle = found.color;
+    ctx.lineWidth   = 2.5;
+    ctx.shadowColor = found.color;
+    ctx.shadowBlur  = 12;
+    ctx.strokeRect(x, y, width, height);
+    ctx.shadowBlur  = 0;
+
+    // Label above box
+    const label = `${found.emoji} ${found.label} ${pct}%`;
+    ctx.font      = 'bold 14px Outfit, sans-serif';
+    ctx.fillStyle = found.color;
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(10,10,15,0.75)';
+    ctx.fillRect(x - 1, y - 28, tw + 14, 24);
+    ctx.fillStyle = found.color;
+    ctx.fillText(label, x + 6, y - 11);
+
+    statusText.textContent = 'Face detected ✓';
+  } else {
+    statusText.textContent = 'No face detected — look at camera';
+    mainEmoji.textContent  = '🔍';
+    mainLabel.textContent  = 'No face';
+    mainLabel.style.color  = 'var(--muted)';
+  }
+
+  requestAnimationFrame(detectLoop);
+}
+</script>
+</body>
+</html>
